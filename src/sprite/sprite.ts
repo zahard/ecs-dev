@@ -21,9 +21,10 @@ export interface SpriteAnimation {
 }
 
 export class SpriteAnimationPlayer {
-  public frameIndex: number = 0;
+  private frameIndex: number = 0;
   private timeToFrameChange: number = 0;
   private _isFinished = false;
+  private drawedOnce = false;
 
   constructor(private animation: SpriteAnimation) {
     this.setAnimation(animation);
@@ -34,6 +35,7 @@ export class SpriteAnimationPlayer {
     this.frameIndex = 0;
     this.timeToFrameChange = 0;
     this._isFinished = false;
+    this.drawedOnce = false;
   }
 
   isFrameStarted(frame: number): boolean {
@@ -73,6 +75,11 @@ export class SpriteAnimationPlayer {
       return false;
     }
 
+    // Need to draw but with default first frame
+    if (!this.drawedOnce) {
+      return true;
+    }
+
     // Reset timer
     this.timeToFrameChange = this.animation.frameDelay;
 
@@ -80,9 +87,10 @@ export class SpriteAnimationPlayer {
     if (this.frameIndex < this.animation.frames.length - 1) {
       this.frameIndex += 1;
     } else {
-      this.frameIndex = 0;
       if (!this.animation.isLooped) {
         this._isFinished = true;
+      } else {
+        this.frameIndex = 0;
       }
     }
 
@@ -90,6 +98,10 @@ export class SpriteAnimationPlayer {
   }
 
   drawFrame(ctx: CanvasRenderingContext2D, pos: Position, mirror?: boolean) {
+    if (!this.drawedOnce) {
+      this.drawedOnce = true;
+    }
+
     const { x, y } = getFrameCoordinate(
       this.animation.sprite,
       this.animationFrame()

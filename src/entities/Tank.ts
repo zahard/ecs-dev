@@ -4,7 +4,15 @@ import {
   SpriteHandle,
   SpriteSettings,
 } from "../sprite/sprite";
-import { Speed2D, Position, frameRange } from "../sprite/utils";
+import {
+  Speed2D,
+  Position,
+  frameRange,
+  toLocalPosition,
+} from "../sprite/utils";
+import { SceneData, WorldObject } from "../world";
+import { ExplosionSprite } from "./Explosion";
+import { ProjectileSprite } from "./Projectile";
 
 export enum TankStateEnum {
   Idle,
@@ -12,30 +20,6 @@ export enum TankStateEnum {
   Jump,
   Shooting,
   Lean,
-}
-
-export interface SceneData {
-  spawnObject: (o: WorldObject) => void;
-}
-
-export interface WorldObject {
-  worldRules: {
-    physics: boolean;
-    spriteAnimation: boolean;
-  };
-  deleteNextTick?: boolean;
-  tick: (delta: number, userIo: any, scene: SceneData) => boolean;
-  draw: (ctx: CanvasRenderingContext2D) => void;
-}
-
-export interface PhysicsObject {
-  pos: Position;
-  speed: Speed2D;
-}
-
-export interface SpriteObject {
-  pos: Position;
-  speed: Speed2D;
 }
 
 export class TankSprite implements WorldObject {
@@ -48,6 +32,7 @@ export class TankSprite implements WorldObject {
     x: 0,
     y: 0,
   };
+  inAir: boolean = false;
   speed: Speed2D = {
     x: 0,
     y: 0,
@@ -57,6 +42,8 @@ export class TankSprite implements WorldObject {
   currentState: TankStateEnum;
 
   private needRedraw = false;
+
+  private jumpSpeed = -10;
 
   tickHandlers = {
     [TankStateEnum.Idle]: () => this.tickIdle,
@@ -74,11 +61,11 @@ export class TankSprite implements WorldObject {
     this.setState(state);
   }
 
-  tick(delta: number, UserIO: any) {
+  tick(delta: number, UserIO: any, sceneData: SceneData) {
     this.needRedraw = false;
 
     const tickHandler = this.tickHandlers[this.currentState]();
-    tickHandler.call(this, UserIO, delta);
+    tickHandler.call(this, UserIO, delta, sceneData);
 
     // Update Sprite Animations
     if (this.spritePlayer.tick(delta)) {
@@ -88,33 +75,21 @@ export class TankSprite implements WorldObject {
     return this.needRedraw;
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
-    this.spritePlayer.drawFrame(ctx, this.pos, this.spriteDir !== -1);
+  draw(ctx: CanvasRenderingContext2D, worldOffset: Position) {
+    const pos = toLocalPosition(worldOffset, this.pos);
+    this.spritePlayer.drawFrame(ctx, pos, this.spriteDir !== -1);
   }
 
-  private tickShooting(UserIO: any, delta: number) {
-    if (this.spritePlayer.isFrameStarted(4)) {
-      // Create Projectile in the middle of animation
-      console.log("BANG");
-
-      this.pos.x -= this.spriteDir * 5;
-      this.needRedraw = true;
-      // projectile = {
-      //   origin: {
-      //     x: this.pos.x + 45 * this.spriteDir,
-      //     y: this.pos.y - 30,
-      //   },
-      //   maxFrame: 20,
-      //   frame: 6,
-      // };
+  private tickShooting(_, __, sceneData: SceneData) {
+    if (this.spritePlayer.isFrameStarted(5)) {
+      this.shootProjectile(sceneData);
     } else if (this.spritePlayer.isFinished()) {
       this.setState(TankStateEnum.Idle);
     }
   }
 
-  private tickLean(UserIO: any, delta: number) {
-    if (this.pos.y === 250) {
-      this.speed.x = 0;
+  private tickLean(UserIO: any, delta: number, sceneData: SceneData) {
+    if (this.inAir === false) {
       this.setState(TankStateEnum.Driving);
       return;
     }
@@ -128,14 +103,17 @@ export class TankSprite implements WorldObject {
       if (UserIO.keyPressed("KeyA")) {
         this.spriteDir = -1;
       }
-      const speed = 35; // 100px per second
+      if (UserIO.keyWasPressed("Space")) {
+        this.shootProjectile(sceneData);
+      }
+      const speed = 40;
       const pxDistance = speed / delta;
       this.speed.x = pxDistance * this.spriteDir;
     }
   }
 
-  private tickJump(UserIO: any) {
-    if (this.pos.y === 250) {
+  private tickJump(UserIO: any, _, sceneData: SceneData) {
+    if (!this.inAir) {
       this.setState(TankStateEnum.Idle);
     }
     if (UserIO.keyPressed("KeyA")) {
@@ -145,6 +123,10 @@ export class TankSprite implements WorldObject {
       this.spriteDir = 1;
       this.setState(TankStateEnum.Lean);
     }
+
+    if (UserIO.keyWasPressed("Space")) {
+      this.shootProjectile(sceneData);
+    }
   }
 
   private tickDriving(UserIO: any, delta: number) {
@@ -153,8 +135,8 @@ export class TankSprite implements WorldObject {
       this.setState(TankStateEnum.Idle);
     } else {
       if (UserIO.keyPressed("KeyW")) {
-        this.speed.y = -10;
-        this.pos.y -= 20;
+        this.speed.y = this.jumpSpeed;
+        this.inAir = true;
         this.setState(TankStateEnum.Jump);
       }
 
@@ -180,10 +162,34 @@ export class TankSprite implements WorldObject {
     } else if (UserIO.keyWasPressed("Space")) {
       this.setState(TankStateEnum.Shooting);
     } else if (UserIO.keyWasPressed("KeyW")) {
-      this.speed.y = -10;
-      this.pos.y -= 20;
+      this.speed.y = this.jumpSpeed;
+      this.inAir = true;
       this.setState(TankStateEnum.Jump);
     }
+  }
+
+  private shootProjectile(sceneData: SceneData) {
+    const explosion = new ExplosionSprite(
+      sceneData.resources.tank,
+      this.spriteDir
+    );
+    explosion.setPosition({
+      x: this.pos.x + 60 * this.spriteDir,
+      y: this.pos.y - 20,
+    });
+
+    const projectile = new ProjectileSprite(
+      sceneData.resources.tank,
+      this.spriteDir
+    );
+    projectile.setPosition({
+      x: this.pos.x + 60 * this.spriteDir,
+      y: this.pos.y - 10,
+    });
+    projectile.setSpeed(this.spriteDir * 5);
+
+    sceneData.spawnObject(projectile);
+    sceneData.spawnObject(explosion);
   }
 
   setPosition(pos: Position) {
@@ -198,21 +204,6 @@ export class TankSprite implements WorldObject {
 
   getAnimation(state: TankStateEnum): SpriteAnimation {
     return this.stateAnimations[state];
-  }
-
-  getStateByName(name: string) {
-    const states: Record<string, TankStateEnum> = {
-      idle: TankStateEnum.Idle,
-      driving: TankStateEnum.Driving,
-      shooting: TankStateEnum.Shooting,
-      jump: TankStateEnum.Jump,
-      lean: TankStateEnum.Lean,
-    };
-    return states[name];
-  }
-
-  getAnimationByStr(stateName: string): SpriteAnimation {
-    return this.getAnimation(this.getStateByName(stateName));
   }
 
   private builsStatesAnimations(

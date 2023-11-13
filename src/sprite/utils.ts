@@ -10,6 +10,13 @@ export interface Speed2D {
   y: number;
 }
 
+export function toLocalPosition(world: Position, pos: Position) {
+  return {
+    x: pos.x - world.x,
+    y: pos.y - world.y,
+  };
+}
+
 export function frameRange(start: number, end: number): number[] {
   if (end < start) {
     const tmp = end;
