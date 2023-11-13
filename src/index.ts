@@ -224,8 +224,8 @@ function loaderFactory(name, imgs, images, loadedCallback) {
 
 loadImages(
   [
-    { name: "tank", path: "/assets/tank.png" },
-    { name: "level_1", path: "/assets/level_1.png" },
+    { name: "tank", path: "assets/tank.png" },
+    { name: "level_1", path: "assets/level_1.png" },
   ],
   startGame
 );
