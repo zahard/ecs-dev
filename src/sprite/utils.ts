@@ -5,6 +5,11 @@ export interface Position {
   y: number;
 }
 
+export interface Speed2D {
+  x: number;
+  y: number;
+}
+
 export function frameRange(start: number, end: number): number[] {
   if (end < start) {
     const tmp = end;

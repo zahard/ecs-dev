@@ -1,3 +1,10 @@
+import {
+  PhysicsObject,
+  SceneData,
+  TankSprite,
+  TankStateEnum,
+  WorldObject,
+} from "./entities/Tank";
 import { UserIO } from "./io";
 import { property } from "./lib";
 import {
@@ -28,7 +35,6 @@ function startGame(imgs) {
   UserIO.init();
 
   const loc = { x: 0, y: 0 };
-  //drawSprite(ctx, tankImageHandle, loc);
 
   const projectileSprite: SpriteSettings = {
     handle: tankImageHandle,
@@ -41,143 +47,35 @@ function startGame(imgs) {
     frameW: 52,
   };
 
-  const TankSprite_1: SpriteSettings = {
-    handle: tankImageHandle,
-    offsetY: 30,
-    offsetX: 0,
-    padY: 1,
-    padX: 3,
-    framesPerRow: 6,
-    frameH: 58,
-    frameW: 72,
-  };
-
-  const TankSprite_Jump: SpriteSettings = {
-    ...TankSprite_1,
-    padY: 3,
-  };
-
-  const TankSprite_Shooting: SpriteSettings = {
-    ...TankSprite_1,
-    offsetX: 2,
-    offsetY: 12,
-    padY: 0,
-    padX: 0,
-    frameH: 62,
-    frameW: 74,
-  };
-
-  const minY = 250;
-
-  const stateAnimations: Record<string, SpriteAnimation> = {
-    driving: {
-      sprite: TankSprite_1,
-      frames: frameRange(6, 11),
-      frameDelay: 100,
-      isLooped: true,
-    },
-
-    shooting: {
-      sprite: TankSprite_Shooting,
-      frames: frameRange(36, 45),
-      frameDelay: 60,
-      isLooped: false,
-    },
-    idle: {
-      sprite: TankSprite_1,
-      frames: frameRange(0, 3),
-      frameDelay: 150,
-      isLooped: true,
-    },
-    jump: {
-      sprite: TankSprite_Jump,
-      frames: [51],
-      frameDelay: 1000,
-      isLooped: true,
-    },
-    lean: {
-      sprite: TankSprite_Jump,
-      frames: [51],
-      frameDelay: 1000,
-      isLooped: true,
-    },
-  };
-
-  const TankEntity: {
-    spritePlayer: SpriteAnimationPlayer;
-    pos: {
-      x: number;
-      y: number;
-    };
-    speed: {
-      y: number;
-      x: number;
-    };
-    spriteDir: number;
-  } = {
-    spritePlayer: new SpriteAnimationPlayer(stateAnimations.idle),
-    pos: { x: 300, y: 250 },
-    spriteDir: 1,
-    speed: {
-      y: 0,
-      x: 0,
-    },
-  };
-
-  let activeAnimation: any;
-  let currentState = "idle";
-
-  const nextState = (stateName: string, action: string) => {
-    const states = {
-      idle: {
-        drive: "driving",
-        jump: "jump",
-        shoot: "shooting",
-      },
-      shooting: {
-        animation_end: "idle",
-      },
-      jump: {
-        drive: "lean",
-        land: "idle",
-      },
-      driving: {
-        stop: "idle",
-        jump: "jump",
-      },
-      lean: {
-        stop: "jump",
-        land: "driving",
-      },
-    };
-
-    return states[stateName][action];
-  };
-
-  let projectile = null;
-
   let iteration = 0;
 
   let timeToFrameChange = 0;
 
-  const setNewState = (state: string) => {
-    currentState = state;
-    activeAnimation = stateAnimations[state];
-    TankEntity.spritePlayer.setAnimation(stateAnimations[state]);
-  };
-
-  const emitAction = (action: string) => {
-    const newStateFound = nextState(currentState, action);
-    if (newStateFound) {
-      setNewState(newStateFound);
-    }
-  };
-
-  setNewState("idle");
-
   let lastTime = 0;
-  window.requestAnimationFrame((x) => animate(x));
 
+  const scene: WorldObject[] = [];
+  const spawnPool: WorldObject[] = [];
+
+  const spawnObject = (obj: WorldObject) => {
+    spawnPool.push(obj);
+  };
+
+  const TankEntity = new TankSprite(tankImageHandle, TankStateEnum.Idle);
+  TankEntity.setPosition({ x: 300, y: 250 });
+  spawnObject(TankEntity);
+
+  const physicsObjects = (): PhysicsObject[] => {
+    const objects = (scene as any).filter(
+      (obj: WorldObject) => !!obj.worldRules.physics
+    );
+    return objects as PhysicsObject[];
+  };
+
+  const sceneData: SceneData = {
+    spawnObject,
+  };
+
+  window.requestAnimationFrame((x) => animate(x));
   function animate(t: number) {
     iteration++;
     const delta = t - lastTime;
@@ -187,166 +85,79 @@ function startGame(imgs) {
 
     let needRedraw = false;
 
-    // State processsing
-    switch (currentState) {
-      case "idle":
-        if (UserIO.keyPressed("KeyA")) {
-          TankEntity.spriteDir = -1;
-          emitAction("drive");
-        } else if (UserIO.keyPressed("KeyD")) {
-          TankEntity.spriteDir = 1;
-          emitAction("drive");
-        } else if (UserIO.keyWasPressed("Space")) {
-          // emitAction("shoot");
-          // needRedraw = true;
-        } else if (UserIO.keyWasPressed("KeyW")) {
-          TankEntity.speed.y = -10;
-          TankEntity.pos.y -= 20;
-          emitAction("jump");
-          needRedraw = true;
-        }
-        break;
+    const _update = (updated: boolean) => {
+      needRedraw = needRedraw || updated;
+    };
 
-      case "driving":
-        if (!UserIO.keyPressed("KeyA") && !UserIO.keyPressed("KeyD")) {
-          TankEntity.speed.x = 0;
-          emitAction("stop");
-        } else {
-          if (UserIO.keyPressed("KeyW")) {
-            TankEntity.speed.y = -10;
-            TankEntity.pos.y -= 20;
-            emitAction("jump");
-            needRedraw = true;
-          }
+    // Find if there any objects is makred for deletion
+    _update(deleteSceneObjects(scene));
 
-          needRedraw = true;
-          if (UserIO.keyPressed("KeyD")) {
-            TankEntity.spriteDir = 1;
-          }
-          if (UserIO.keyPressed("KeyA")) {
-            TankEntity.spriteDir = -1;
-          }
-          const speed = 50; // 100px per second
-          const pxDistance = speed / delta;
-          TankEntity.speed.x = pxDistance * TankEntity.spriteDir;
-        }
-        break;
-
-      case "jump":
-        if (TankEntity.pos.y === 250) {
-          emitAction("land");
-        }
-        if (UserIO.keyPressed("KeyA")) {
-          TankEntity.spriteDir = -1;
-          emitAction("drive");
-        } else if (UserIO.keyPressed("KeyD")) {
-          TankEntity.spriteDir = 1;
-          emitAction("drive");
-        }
-        break;
-
-      case "lean":
-        if (TankEntity.pos.y === 250) {
-          TankEntity.speed.x = 0;
-          emitAction("land");
-          break;
-        }
-        if (!UserIO.keyPressed("KeyA") && !UserIO.keyPressed("KeyD")) {
-          TankEntity.speed.x = 0;
-          emitAction("stop");
-        } else {
-          needRedraw = true;
-          if (UserIO.keyPressed("KeyD")) {
-            TankEntity.spriteDir = 1;
-          }
-          if (UserIO.keyPressed("KeyA")) {
-            TankEntity.spriteDir = -1;
-          }
-          const speed = 35; // 100px per second
-          const pxDistance = speed / delta;
-          TankEntity.speed.x = pxDistance * TankEntity.spriteDir;
-        }
-        break;
-
-      case "shooting":
-        const animationIndex = TankEntity.spritePlayer.getFrameIndex();
-
-        if (
-          animationIndex === 4 &&
-          TankEntity.spritePlayer.timeToFrame() <= 0
-        ) {
-          // Create Projectile in the middle of animation
-          console.log("BANG");
-
-          TankEntity.pos.x -= TankEntity.spriteDir * 5;
-
-          projectile = {
-            origin: {
-              x: TankEntity.pos.x + 45 * TankEntity.spriteDir,
-              y: TankEntity.pos.y - 30,
-            },
-            maxFrame: 20,
-            frame: 6,
-          };
-        }
+    // Add new scene objects
+    if (spawnPool.length) {
+      scene.push(...spawnPool);
+      spawnPool.length = 0;
     }
 
-    if (projectile) {
-      projectile.frame++;
-      if (projectile.frame >= projectile.maxFrame) {
-        projectile = null;
-        needRedraw = true;
-      } else {
-      }
-    }
+    // Tick Updates for Entities
+    scene.forEach((sceneObj) => {
+      _update(sceneObj.tick(delta, UserIO, sceneData));
+    });
 
-    if (TankEntity.spritePlayer.tick(delta)) {
-      needRedraw = true;
-    }
+    // Recalculate physic
+    physicsObjects().forEach((worldObj) => {
+      _update(applyPhysicsTick(worldObj, delta));
+    });
 
-    // recalculate physic
-
-    // Applied force
-    if (TankEntity.speed.x !== 0) {
-      TankEntity.pos.x += TankEntity.speed.x;
-    }
-
-    // Gravity
-    if (TankEntity.speed.y !== 0) {
-      TankEntity.pos.y += TankEntity.speed.y;
-      TankEntity.speed.y += 0.3;
-
-      // Landed
-      if (TankEntity.pos.y >= 250) {
-        TankEntity.pos.y = 250;
-        TankEntity.speed.y = 0;
-      }
-
-      needRedraw = true;
-    }
-
+    // Draw a frame is required
     if (needRedraw) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      TankEntity.spritePlayer.drawFrame(
-        ctx,
-        TankEntity.pos,
-        TankEntity.spriteDir !== -1
-      );
-
-      if (projectile) {
-        // drawAnimationFrame(
-        //   ctx,
-        //   projectileSprite,
-        //   projectile.frame,
-        //   projectile.origin
-        // );
-      }
+      scene.forEach((entity) => {
+        entity.draw(ctx);
+      });
     }
 
     UserIO.afterTick();
     window.requestAnimationFrame(animate);
   }
+}
+
+function deleteSceneObjects(scene: WorldObject[]) {
+  const forDelete = scene.filter((o) => o.deleteNextTick);
+  if (!forDelete.length) {
+    return false;
+  }
+  forDelete.forEach((obj) => {
+    // Free resources if needed
+    // obj.dispose()
+    const index = scene.indexOf(obj);
+    scene.splice(index, 1);
+  });
+  return true;
+}
+
+function applyPhysicsTick(entity: PhysicsObject, delta: number) {
+  let needRedraw = false;
+  // Applied force
+  if (entity.speed.x !== 0) {
+    entity.pos.x += entity.speed.x;
+    needRedraw = true;
+  }
+
+  // Gravity
+  if (entity.speed.y !== 0) {
+    entity.pos.y += entity.speed.y;
+    entity.speed.y += 0.3;
+
+    // Landed
+    if (entity.pos.y >= 250) {
+      entity.pos.y = 250;
+      entity.speed.y = 0;
+    }
+    needRedraw = true;
+  }
+
+  return needRedraw;
 }
 
 function createTransparentSprite(image: any) {

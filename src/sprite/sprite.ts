@@ -1,6 +1,6 @@
 import { Position, getFrameCoordinate } from "./utils";
 
-type SpriteHandle = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+export type SpriteHandle = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
 
 export interface SpriteSettings {
   handle: SpriteHandle;
@@ -21,9 +21,9 @@ export interface SpriteAnimation {
 }
 
 export class SpriteAnimationPlayer {
-  private frameIndex: number = 0;
+  public frameIndex: number = 0;
   private timeToFrameChange: number = 0;
-  private isFinished = false;
+  private _isFinished = false;
 
   constructor(private animation: SpriteAnimation) {
     this.setAnimation(animation);
@@ -33,11 +33,22 @@ export class SpriteAnimationPlayer {
     this.animation = animation;
     this.frameIndex = 0;
     this.timeToFrameChange = 0;
-    this.isFinished = false;
+    this._isFinished = false;
+  }
+
+  isFrameStarted(frame: number): boolean {
+    if (this.frameIndex !== frame) {
+      return false;
+    }
+    return this.animation.frameDelay === this.timeToFrameChange;
   }
 
   isActive(): boolean {
-    return this.isFinished;
+    return !this._isFinished;
+  }
+
+  isFinished(): boolean {
+    return this._isFinished;
   }
 
   getFrameIndex(): number {
@@ -53,7 +64,7 @@ export class SpriteAnimationPlayer {
   }
 
   tick(delta: number): boolean {
-    if (this.isFinished) {
+    if (this._isFinished) {
       return false;
     }
 
@@ -71,7 +82,7 @@ export class SpriteAnimationPlayer {
     } else {
       this.frameIndex = 0;
       if (!this.animation.isLooped) {
-        this.isFinished = true;
+        this._isFinished = true;
       }
     }
 
