@@ -47,11 +47,9 @@ function startGame(imgs) {
     frameW: 52,
   };
 
-  let iteration = 0;
-
-  let timeToFrameChange = 0;
-
   let lastTime = 0;
+
+  let gamePaused = false;
 
   const scene: WorldObject[] = [];
   const spawnPool: WorldObject[] = [];
@@ -77,11 +75,18 @@ function startGame(imgs) {
 
   window.requestAnimationFrame((x) => animate(x));
   function animate(t: number) {
-    iteration++;
     const delta = t - lastTime;
     lastTime = t;
 
-    timeToFrameChange -= delta;
+    if (UserIO.keyWasPressed("Escape")) {
+      gamePaused = !gamePaused;
+    }
+
+    if (gamePaused) {
+      UserIO.afterTick();
+      window.requestAnimationFrame(animate);
+      return;
+    }
 
     let needRedraw = false;
 
